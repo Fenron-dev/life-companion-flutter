@@ -17,7 +17,7 @@ Life Companion is a personal AI-powered life tracker built as a Flutter mobile a
 
 ## Architecture
 
-**Stack:** Flutter 3.41+, Dart 3.11+, Riverpod (state management), Drift (SQLite), http (Ollama API), llamadart (local LLM).
+**Stack:** Flutter 3.27+, Dart 3.6+, Riverpod (state management), Drift (SQLite), http (Ollama API), llamadart (local LLM).
 
 **AI Backend (dual, with auto-fallback):**
 - `lib/services/ai_service.dart` — Unified AI service. Auto-detects Ollama availability (3s timeout) and falls back to local model. Priority: Ollama → Local → None.
