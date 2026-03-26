@@ -29,6 +29,8 @@ class LocalLLMService {
   LocalLLMStatus _status = LocalLLMStatus.notDownloaded;
   String? _errorMessage;
   String? _modelPath;
+  int? _loadedGpuLayers;
+  int? _loadedContextSize;
 
   LocalLLMStatus get status => _status;
   String? get errorMessage => _errorMessage;
@@ -127,9 +129,21 @@ class LocalLLMService {
     return 0;
   }
 
-  /// Initialize the engine and load the model
-  Future<void> loadModel() async {
-    if (_engine != null) return; // Already loaded
+  /// Initialize the engine and load the model.
+  /// [gpuLayers]: 0 = CPU-only (safe default), 999 = all layers on GPU.
+  /// [contextSize]: context window in tokens.
+  /// If already loaded with the same params, this is a no-op.
+  Future<void> loadModel({int gpuLayers = 0, int contextSize = 2048}) async {
+    // Already loaded with same params → nothing to do
+    if (_engine != null &&
+        _loadedGpuLayers == gpuLayers &&
+        _loadedContextSize == contextSize) {
+      _status = LocalLLMStatus.ready;
+      return;
+    }
+
+    // Params changed → unload first
+    if (_engine != null) await dispose();
 
     final downloaded = await isModelDownloaded();
     if (!downloaded) {
@@ -143,7 +157,15 @@ class LocalLLMService {
     try {
       final path = await _modelFilePath;
       _engine = LlamaEngine(LlamaBackend());
-      await _engine!.loadModel(path);
+      await _engine!.loadModel(
+        path,
+        modelParams: ModelParams(
+          gpuLayers: gpuLayers,
+          contextSize: contextSize,
+        ),
+      );
+      _loadedGpuLayers = gpuLayers;
+      _loadedContextSize = contextSize;
       _status = LocalLLMStatus.ready;
     } catch (e) {
       _status = LocalLLMStatus.error;
@@ -167,17 +189,19 @@ class LocalLLMService {
     return _chatSession!;
   }
 
-  /// Chat with the local model (streaming)
+  /// Chat with the local model (streaming).
   Stream<String> chatStream({
     required String message,
     String? systemPrompt,
     String? context,
+    int maxTokens = 512,
+    double temperature = 0.7,
+    bool enableThinking = false,
   }) async* {
     if (_engine == null) {
       throw Exception('Engine not loaded');
     }
 
-    // Build the user message with context
     final userMessage = StringBuffer();
     if (context != null && context.isNotEmpty) {
       userMessage.writeln('Context about the user\'s day:');
@@ -190,11 +214,8 @@ class LocalLLMService {
 
     await for (final chunk in session.create(
       [LlamaTextContent(userMessage.toString())],
-      enableThinking: false, // Disable Qwen3 thinking mode to prevent OOM
-      params: const GenerationParams(
-        maxTokens: 512,
-        temp: 0.7,
-      ),
+      enableThinking: enableThinking,
+      params: GenerationParams(maxTokens: maxTokens, temp: temperature),
     )) {
       final content = chunk.choices.firstOrNull?.delta.content;
       if (content != null && content.isNotEmpty) {
@@ -203,17 +224,23 @@ class LocalLLMService {
     }
   }
 
-  /// Chat with the local model (non-streaming, returns full response)
+  /// Chat with the local model (non-streaming, returns full response).
   Future<String> chat({
     required String message,
     String? systemPrompt,
     String? context,
+    int maxTokens = 512,
+    double temperature = 0.7,
+    bool enableThinking = false,
   }) async {
     final buffer = StringBuffer();
     await for (final chunk in chatStream(
       message: message,
       systemPrompt: systemPrompt,
       context: context,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      enableThinking: enableThinking,
     )) {
       buffer.write(chunk);
     }

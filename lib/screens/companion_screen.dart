@@ -29,7 +29,10 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
     ),
   ];
 
-  bool _isLoading = false;
+  bool _isLoading = false;     // true while resolving backend / loading model
+  String? _streamingContent;   // non-null while tokens are streaming in
+
+  bool get _isBusy => _isLoading || _streamingContent != null;
 
   @override
   void dispose() {
@@ -52,7 +55,7 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
 
   Future<void> _handleSend() async {
     final text = _inputController.text.trim();
-    if (text.isEmpty || _isLoading) return;
+    if (text.isEmpty || _isBusy) return;
 
     _inputController.clear();
 
@@ -81,29 +84,48 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
         ..writeln('[END USER NOTES]')
         ..writeln('Auto-logged events: ${logs.length}');
 
-      final response = await ai.chat(
+      final stream = ai.chatStream(
         message: text,
         context: context.toString(),
       );
 
+      // Switch from loading indicator to streaming bubble
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _streamingContent = '';
+        });
+      }
+
+      await for (final chunk in stream) {
+        if (mounted) {
+          setState(() => _streamingContent = (_streamingContent ?? '') + chunk);
+          _scrollToBottom();
+        }
+      }
+
+      // Finalize: move streamed content into message list
       if (mounted) {
         setState(() {
           _messages.add(ChatMessage(
             id: _uuid.v4(),
             role: MessageRole.ai,
-            content: response,
+            content: _streamingContent ?? '',
             timestamp: DateTime.now().millisecondsSinceEpoch,
           ));
+          _streamingContent = null;
         });
         _scrollToBottom();
       }
     } catch (e) {
       if (mounted) {
         setState(() {
+          _streamingContent = null;
+          _isLoading = false;
           _messages.add(ChatMessage(
             id: _uuid.v4(),
             role: MessageRole.ai,
-            content: 'Verbindungsfehler. Ist der Ollama Server erreichbar?',
+            content: 'Fehler: $e',
             timestamp: DateTime.now().millisecondsSinceEpoch,
           ));
         });
@@ -144,13 +166,19 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
           child: ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            itemCount: _messages.length + (_isLoading ? 1 : 0),
+            itemCount: _messages.length +
+                (_isLoading ? 1 : 0) +
+                (_streamingContent != null ? 1 : 0),
             itemBuilder: (context, index) {
-              if (index == _messages.length && _isLoading) {
-                return _buildTypingIndicator();
+              if (index < _messages.length) {
+                final msg = _messages[index];
+                return _MessageBubble(key: ValueKey(msg.id), message: msg);
               }
-              final msg = _messages[index];
-              return _MessageBubble(key: ValueKey(msg.id), message: msg);
+              if (_isLoading) return _buildTypingIndicator();
+              if (_streamingContent != null) {
+                return _buildStreamingBubble(_streamingContent!);
+              }
+              return const SizedBox();
             },
           ),
         ),
@@ -164,6 +192,7 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
                 child: TextField(
                   controller: _inputController,
                   onSubmitted: (_) => _handleSend(),
+                  enabled: !_isBusy,
                   decoration: const InputDecoration(
                     hintText: 'Schreib mir...',
                   ),
@@ -171,12 +200,14 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
               ),
               const SizedBox(width: 8),
               Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.accent,
+                  color: _isBusy
+                      ? AppColors.mutedText
+                      : AppColors.accent,
                 ),
                 child: IconButton(
-                  onPressed: _isLoading ? null : _handleSend,
+                  onPressed: _isBusy ? null : _handleSend,
                   icon: const Icon(Icons.send, size: 18, color: Colors.white),
                 ),
               ),
@@ -203,6 +234,37 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
           border: Border.all(color: AppColors.cardBorder),
         ),
         child: const _TypingDots(),
+      ),
+    );
+  }
+
+  Widget _buildStreamingBubble(String content) {
+    final theme = Theme.of(context).textTheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+        ),
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(32),
+            topRight: Radius.circular(32),
+            bottomRight: Radius.circular(32),
+          ),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: content.isEmpty
+            ? const _TypingDots()
+            : MarkdownBody(
+                data: content,
+                styleSheet: MarkdownStyleSheet(
+                  p: TextStyle(fontSize: 14, color: AppColors.textBody),
+                ),
+              ),
       ),
     );
   }

@@ -6,6 +6,9 @@ import '../services/ai_service.dart';
 import '../services/local_llm_service.dart';
 import '../utils/theme.dart';
 
+// Discrete GPU layer options: 0=CPU, low, mid, high, all
+const _gpuLayerOptions = [0, 10, 20, 33, 999];
+
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
 
@@ -160,6 +163,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final config = ref.watch(ollamaConfigProvider);
     final locationConsent = ref.watch(locationConsentProvider);
     final ai = ref.watch(aiServiceProvider);
+    final llmSettings = ref.watch(llmSettingsProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -321,6 +325,133 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                     ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // --- LLM Generation Settings ---
+          _SettingsCard(
+            children: [
+              Text('GENERATION EINSTELLUNGEN', style: theme.labelSmall),
+              const SizedBox(height: 4),
+              Text(
+                'Änderungen von GPU Layers / Context Size erfordern ein Neu-Laden des Modells.',
+                style: theme.bodySmall,
+              ),
+              const SizedBox(height: 20),
+
+              // GPU Layers
+              _SliderRow(
+                label: 'GPU LAYERS',
+                valueLabel: llmSettings.gpuLayers == 0
+                    ? 'CPU only'
+                    : llmSettings.gpuLayers == 999
+                        ? 'Alle (GPU)'
+                        : '${llmSettings.gpuLayers} Layer',
+                value: _gpuLayerOptions
+                    .indexOf(llmSettings.gpuLayers)
+                    .toDouble()
+                    .clamp(0, _gpuLayerOptions.length - 1),
+                min: 0,
+                max: (_gpuLayerOptions.length - 1).toDouble(),
+                divisions: _gpuLayerOptions.length - 1,
+                hint: '0 = kein Absturz, höher = schneller (wenn Vulkan unterstützt)',
+                onChanged: (v) {
+                  final idx = v.round().clamp(0, _gpuLayerOptions.length - 1);
+                  final layers = _gpuLayerOptions[idx];
+                  ref.read(llmSettingsProvider.notifier).update(gpuLayers: layers);
+                  // Unload model so it reloads with new params
+                  ref.read(localLLMServiceProvider).dispose();
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Context Size
+              _SliderRow(
+                label: 'CONTEXT SIZE',
+                valueLabel: '${llmSettings.contextSize} Tokens',
+                value: llmSettings.contextSize.toDouble(),
+                min: 512,
+                max: 4096,
+                divisions: 7,
+                hint: 'Mehr = längeres Gedächtnis, mehr RAM',
+                onChanged: (v) {
+                  final size = (v / 512).round() * 512;
+                  ref.read(llmSettingsProvider.notifier).update(contextSize: size);
+                  ref.read(localLLMServiceProvider).dispose();
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Max Tokens
+              _SliderRow(
+                label: 'MAX TOKENS',
+                valueLabel: '${llmSettings.maxTokens}',
+                value: llmSettings.maxTokens.toDouble(),
+                min: 64,
+                max: 1024,
+                divisions: 15,
+                hint: 'Maximale Länge der Antwort',
+                onChanged: (v) {
+                  ref
+                      .read(llmSettingsProvider.notifier)
+                      .update(maxTokens: v.round());
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Temperature
+              _SliderRow(
+                label: 'TEMPERATURE',
+                valueLabel: llmSettings.temperature.toStringAsFixed(1),
+                value: llmSettings.temperature,
+                min: 0.1,
+                max: 1.5,
+                divisions: 14,
+                hint: '0.1 = präzise, 1.5 = kreativ',
+                onChanged: (v) {
+                  final t = (v * 10).round() / 10;
+                  ref.read(llmSettingsProvider.notifier).update(temperature: t);
+                },
+              ),
+              const SizedBox(height: 16),
+
+              // Thinking Mode
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('THINKING MODE',
+                              style: theme.labelSmall?.copyWith(fontSize: 10)),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Qwen3 interner Denkprozess. Kann auf kleinen Geräten OOM-Abstürze verursachen.',
+                            style: theme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: llmSettings.enableThinking,
+                      activeTrackColor: AppColors.accent,
+                      onChanged: (v) {
+                        ref
+                            .read(llmSettingsProvider.notifier)
+                            .update(enableThinking: v);
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -518,6 +649,68 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 80),
         ],
       ),
+    );
+  }
+}
+
+class _SliderRow extends StatelessWidget {
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String hint;
+  final ValueChanged<double> onChanged;
+
+  const _SliderRow({
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.hint,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: theme.labelSmall?.copyWith(fontSize: 10)),
+            Text(
+              valueLabel,
+              style: theme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.accent,
+              ),
+            ),
+          ],
+        ),
+        SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            activeTrackColor: AppColors.accent,
+            inactiveTrackColor: AppColors.cardBorder,
+            thumbColor: AppColors.accent,
+            overlayColor: AppColors.accent.withValues(alpha: 0.1),
+            trackHeight: 3,
+          ),
+          child: Slider(
+            value: value.clamp(min, max),
+            min: min,
+            max: max,
+            divisions: divisions,
+            onChanged: onChanged,
+          ),
+        ),
+        Text(hint, style: theme.bodySmall?.copyWith(fontSize: 10)),
+      ],
     );
   }
 }

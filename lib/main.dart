@@ -20,6 +20,9 @@ Future<void> main() async {
   final locationNotifier = LocationConsentNotifier();
   await locationNotifier.loadFromPrefs();
 
+  final llmSettingsNotifier = LlmSettingsNotifier();
+  await llmSettingsNotifier.loadFromPrefs();
+
   // Initialize local LLM service (model loaded lazily on first use)
   final localLLM = LocalLLMService();
 
@@ -29,6 +32,7 @@ Future<void> main() async {
         databaseProvider.overrideWithValue(database),
         ollamaConfigProvider.overrideWith((_) => ollamaNotifier),
         locationConsentProvider.overrideWith((_) => locationNotifier),
+        llmSettingsProvider.overrideWith((_) => llmSettingsNotifier),
         localLLMServiceProvider.overrideWithValue(localLLM),
       ],
       child: const LifeCompanionApp(),

@@ -1,3 +1,4 @@
+import '../providers/providers.dart' show LlmSettings;
 import 'local_llm_service.dart';
 import 'ollama_service.dart';
 
@@ -15,6 +16,7 @@ enum AIBackend {
 class AIService {
   final OllamaService _ollama;
   final LocalLLMService _localLLM;
+  final LlmSettings settings;
 
   AIBackend _currentBackend = AIBackend.none;
   AIBackend get currentBackend => _currentBackend;
@@ -27,6 +29,7 @@ class AIService {
   AIService({
     required OllamaService ollama,
     required LocalLLMService localLLM,
+    required this.settings,
   })  : _ollama = ollama,
         _localLLM = localLLM;
 
@@ -35,7 +38,6 @@ class AIService {
 
   /// Determine which backend to use right now
   Future<AIBackend> resolveBackend() async {
-    // If user forced a backend, use it
     if (forcedBackend != null) {
       _currentBackend = forcedBackend!;
       return _currentBackend;
@@ -64,7 +66,10 @@ class AIService {
     // Try loading local model if downloaded but not loaded
     if (autoFallback && await _localLLM.isModelDownloaded()) {
       try {
-        await _localLLM.loadModel();
+        await _localLLM.loadModel(
+          gpuLayers: settings.gpuLayers,
+          contextSize: settings.contextSize,
+        );
         _currentBackend = AIBackend.local;
         return AIBackend.local;
       } catch (_) {
@@ -76,7 +81,7 @@ class AIService {
     return AIBackend.none;
   }
 
-  /// Chat with auto-backend selection
+  /// Chat with auto-backend selection (non-streaming)
   Future<String> chat({
     required String message,
     String? context,
@@ -93,6 +98,9 @@ class AIService {
         return _localLLM.chat(
           message: message,
           context: context,
+          maxTokens: settings.maxTokens,
+          temperature: settings.temperature,
+          enableThinking: settings.enableThinking,
         );
       case AIBackend.none:
         return 'Kein AI-Backend verfügbar. Bitte Ollama-Server starten oder lokales Modell herunterladen.';
@@ -120,6 +128,9 @@ class AIService {
         yield* _localLLM.chatStream(
           message: message,
           context: context,
+          maxTokens: settings.maxTokens,
+          temperature: settings.temperature,
+          enableThinking: settings.enableThinking,
         );
       case AIBackend.none:
         yield 'Kein AI-Backend verfügbar. Bitte Ollama-Server starten oder lokales Modell herunterladen.';

@@ -7,6 +7,93 @@ import '../services/local_llm_service.dart';
 import '../services/ollama_service.dart';
 import '../utils/streak_calculator.dart';
 
+// --- LLM Settings ---
+
+class LlmSettings {
+  /// GPU layers to offload (0 = CPU-only, 999 = all layers on GPU).
+  /// Default 0 to avoid Vulkan crashes on unsupported devices.
+  final int gpuLayers;
+
+  /// Context window size in tokens (affects RAM usage).
+  final int contextSize;
+
+  /// Max tokens to generate per response.
+  final int maxTokens;
+
+  /// Sampling temperature (0.1 = deterministic, 1.5 = creative).
+  final double temperature;
+
+  /// Enable Qwen3 thinking mode (<think> blocks). Can cause OOM on small devices.
+  final bool enableThinking;
+
+  const LlmSettings({
+    this.gpuLayers = 0,
+    this.contextSize = 2048,
+    this.maxTokens = 512,
+    this.temperature = 0.7,
+    this.enableThinking = false,
+  });
+
+  LlmSettings copyWith({
+    int? gpuLayers,
+    int? contextSize,
+    int? maxTokens,
+    double? temperature,
+    bool? enableThinking,
+  }) =>
+      LlmSettings(
+        gpuLayers: gpuLayers ?? this.gpuLayers,
+        contextSize: contextSize ?? this.contextSize,
+        maxTokens: maxTokens ?? this.maxTokens,
+        temperature: temperature ?? this.temperature,
+        enableThinking: enableThinking ?? this.enableThinking,
+      );
+}
+
+class LlmSettingsNotifier extends StateNotifier<LlmSettings> {
+  LlmSettingsNotifier() : super(const LlmSettings());
+
+  Future<void> loadFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = LlmSettings(
+      gpuLayers: prefs.getInt('llm_gpu_layers') ?? 0,
+      contextSize: prefs.getInt('llm_context_size') ?? 2048,
+      maxTokens: prefs.getInt('llm_max_tokens') ?? 512,
+      temperature: prefs.getDouble('llm_temperature') ?? 0.7,
+      enableThinking: prefs.getBool('llm_enable_thinking') ?? false,
+    );
+  }
+
+  Future<void> update({
+    int? gpuLayers,
+    int? contextSize,
+    int? maxTokens,
+    double? temperature,
+    bool? enableThinking,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (gpuLayers != null) await prefs.setInt('llm_gpu_layers', gpuLayers);
+    if (contextSize != null) await prefs.setInt('llm_context_size', contextSize);
+    if (maxTokens != null) await prefs.setInt('llm_max_tokens', maxTokens);
+    if (temperature != null) await prefs.setDouble('llm_temperature', temperature);
+    if (enableThinking != null) {
+      await prefs.setBool('llm_enable_thinking', enableThinking);
+    }
+    state = state.copyWith(
+      gpuLayers: gpuLayers,
+      contextSize: contextSize,
+      maxTokens: maxTokens,
+      temperature: temperature,
+      enableThinking: enableThinking,
+    );
+  }
+}
+
+final llmSettingsProvider =
+    StateNotifierProvider<LlmSettingsNotifier, LlmSettings>((ref) {
+  return LlmSettingsNotifier();
+});
+
 // --- Database ---
 
 final databaseProvider = Provider<AppDatabase>((ref) {
@@ -61,7 +148,8 @@ final localLLMServiceProvider = Provider<LocalLLMService>((ref) {
 final aiServiceProvider = Provider<AIService>((ref) {
   final ollama = ref.watch(ollamaServiceProvider);
   final localLLM = ref.watch(localLLMServiceProvider);
-  return AIService(ollama: ollama, localLLM: localLLM);
+  final settings = ref.watch(llmSettingsProvider);
+  return AIService(ollama: ollama, localLLM: localLLM, settings: settings);
 });
 
 // --- Location Consent ---
