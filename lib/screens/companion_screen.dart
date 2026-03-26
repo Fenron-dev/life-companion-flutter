@@ -239,7 +239,6 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
   }
 
   Widget _buildStreamingBubble(String content) {
-    final theme = Theme.of(context).textTheme;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(

@@ -23,7 +23,7 @@ class LlmSettings {
   /// Sampling temperature (0.1 = deterministic, 1.5 = creative).
   final double temperature;
 
-  /// Enable Qwen3 thinking mode (<think> blocks). Can cause OOM on small devices.
+  /// Enable Qwen3 thinking mode (think blocks). Can cause OOM on small devices.
   final bool enableThinking;
 
   const LlmSettings({
