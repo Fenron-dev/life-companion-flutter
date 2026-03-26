@@ -55,6 +55,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final recentNotesAsync = ref.watch(recentNotesProvider);
     final theme = Theme.of(context).textTheme;
 
+    final weatherLoading = logsAsync is AsyncLoading;
     final weather = logsAsync.whenOrNull(
       data: (logs) {
         final weatherLog = logs.where((l) => l.type == 'weather').firstOrNull;
@@ -90,8 +91,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Expanded(child: _StatCard(
                 icon: Icons.cloud_outlined,
                 label: 'WEATHER',
-                value: '${weather?['temp'] ?? '--'}°',
-                subtitle: (weather?['condition'] as String?) ?? 'Loading...',
+                value: weather != null ? '${weather['temp']}°' : '--°',
+                subtitle: weatherLoading
+                    ? 'Loading...'
+                    : (weather?['condition'] as String?) ?? 'No data',
               )),
             ],
           ),

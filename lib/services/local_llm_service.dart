@@ -190,6 +190,11 @@ class LocalLLMService {
 
     await for (final chunk in session.create(
       [LlamaTextContent(userMessage.toString())],
+      enableThinking: false, // Disable Qwen3 thinking mode to prevent OOM
+      params: const GenerationParams(
+        maxTokens: 512,
+        temp: 0.7,
+      ),
     )) {
       final content = chunk.choices.firstOrNull?.delta.content;
       if (content != null && content.isNotEmpty) {
