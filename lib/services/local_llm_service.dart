@@ -212,15 +212,21 @@ class LocalLLMService {
 
     final session = _getOrCreateSession(systemPrompt: systemPrompt);
 
-    await for (final chunk in session.create(
-      [LlamaTextContent(userMessage.toString())],
-      enableThinking: enableThinking,
-      params: GenerationParams(maxTokens: maxTokens, temp: temperature),
-    )) {
-      final content = chunk.choices.firstOrNull?.delta.content;
-      if (content != null && content.isNotEmpty) {
-        yield content;
+    try {
+      await for (final chunk in session.create(
+        [LlamaTextContent(userMessage.toString())],
+        enableThinking: enableThinking,
+        params: GenerationParams(maxTokens: maxTokens, temp: temperature),
+      )) {
+        final content = chunk.choices.firstOrNull?.delta.content;
+        if (content != null && content.isNotEmpty) {
+          yield content;
+        }
       }
+    } catch (e) {
+      // Reset session on any error so the next call starts fresh.
+      _chatSession = null;
+      rethrow;
     }
   }
 

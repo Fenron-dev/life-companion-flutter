@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,11 +33,14 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
 
   bool _isLoading = false;     // true while resolving backend / loading model
   String? _streamingContent;   // non-null while tokens are streaming in
+  StreamSubscription<String>? _activeStream;
 
   bool get _isBusy => _isLoading || _streamingContent != null;
 
   @override
   void dispose() {
+    _activeStream?.cancel();
+    _activeStream = null;
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -43,13 +48,12 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     });
   }
 
@@ -90,19 +94,31 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
       );
 
       // Switch from loading indicator to streaming bubble
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _streamingContent = '';
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _streamingContent = '';
+      });
 
-      await for (final chunk in stream) {
-        if (mounted) {
-          setState(() => _streamingContent = (_streamingContent ?? '') + chunk);
-          _scrollToBottom();
-        }
-      }
+      // Use StreamSubscription so we can cancel on dispose
+      final completer = Completer<void>();
+      _activeStream = stream.listen(
+        (chunk) {
+          if (mounted) {
+            setState(
+              () => _streamingContent = (_streamingContent ?? '') + chunk,
+            );
+            _scrollToBottom();
+          }
+        },
+        onDone: completer.complete,
+        onError: (Object e, StackTrace st) {
+          if (!completer.isCompleted) completer.completeError(e, st);
+        },
+        cancelOnError: true,
+      );
+      await completer.future;
+      _activeStream = null;
 
       // Finalize: move streamed content into message list
       if (mounted) {
@@ -118,6 +134,7 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
         _scrollToBottom();
       }
     } catch (e) {
+      _activeStream = null;
       if (mounted) {
         setState(() {
           _streamingContent = null;
@@ -132,6 +149,7 @@ class _CompanionScreenState extends ConsumerState<CompanionScreen> {
         _scrollToBottom();
       }
     } finally {
+      _activeStream = null;
       if (mounted) setState(() => _isLoading = false);
     }
   }
