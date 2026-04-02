@@ -73,7 +73,7 @@ class AIService {
         _currentBackend = AIBackend.local;
         return AIBackend.local;
       } catch (_) {
-        // Local model failed to load
+        // Error stored in _localLLM.errorMessage
       }
     }
 
@@ -103,6 +103,10 @@ class AIService {
           enableThinking: settings.enableThinking,
         );
       case AIBackend.none:
+        final err = _localLLM.errorMessage;
+        if (err != null) {
+          return 'Lokales Modell konnte nicht geladen werden: $err';
+        }
         return 'Kein AI-Backend verfügbar. Bitte Ollama-Server starten oder lokales Modell herunterladen.';
     }
   }
@@ -133,7 +137,12 @@ class AIService {
           enableThinking: settings.enableThinking,
         );
       case AIBackend.none:
-        yield 'Kein AI-Backend verfügbar. Bitte Ollama-Server starten oder lokales Modell herunterladen.';
+        final err = _localLLM.errorMessage;
+        if (err != null) {
+          yield 'Lokales Modell konnte nicht geladen werden: $err';
+        } else {
+          yield 'Kein AI-Backend verfügbar. Bitte Ollama-Server starten oder lokales Modell herunterladen.';
+        }
     }
   }
 
