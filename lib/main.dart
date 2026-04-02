@@ -23,8 +23,12 @@ Future<void> main() async {
   final llmSettingsNotifier = LlmSettingsNotifier();
   await llmSettingsNotifier.loadFromPrefs();
 
-  // Initialize local LLM service (model loaded lazily on first use)
+  final selectedModelNotifier = SelectedLocalModelNotifier();
+  await selectedModelNotifier.loadFromPrefs();
+
+  // Initialize local LLM service with the persisted model selection
   final localLLM = LocalLLMService();
+  await localLLM.setModel(selectedModelNotifier.current);
 
   runApp(
     ProviderScope(
@@ -33,6 +37,7 @@ Future<void> main() async {
         ollamaConfigProvider.overrideWith((_) => ollamaNotifier),
         locationConsentProvider.overrideWith((_) => locationNotifier),
         llmSettingsProvider.overrideWith((_) => llmSettingsNotifier),
+        selectedLocalModelProvider.overrideWith((_) => selectedModelNotifier),
         localLLMServiceProvider.overrideWithValue(localLLM),
       ],
       child: const LifeCompanionApp(),

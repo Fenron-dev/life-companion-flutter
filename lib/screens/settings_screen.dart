@@ -164,6 +164,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final locationConsent = ref.watch(locationConsentProvider);
     final ai = ref.watch(aiServiceProvider);
     final llmSettings = ref.watch(llmSettingsProvider);
+    final selectedModel = ref.watch(selectedLocalModelProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -230,6 +231,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               Text('LOKALES MODELL', style: theme.labelSmall),
               const SizedBox(height: 16),
 
+              // Model picker
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppColors.cardBorder),
+                ),
+                child: DropdownButton<String>(
+                  value: selectedModel.id,
+                  isExpanded: true,
+                  underline: const SizedBox.shrink(),
+                  items: LocalModelConfigs.all.map((m) {
+                    return DropdownMenuItem(
+                      value: m.id,
+                      child: Text('${m.displayName}  ·  ${m.description}',
+                          style: theme.bodySmall),
+                    );
+                  }).toList(),
+                  onChanged: _isDownloading
+                      ? null
+                      : (id) async {
+                          if (id == null) return;
+                          final model = LocalModelConfigs.fromId(id);
+                          await ref
+                              .read(selectedLocalModelProvider.notifier)
+                              .selectModel(model);
+                          final localLLM = ref.read(localLLMServiceProvider);
+                          await localLLM.setModel(model);
+                          await _checkLocalModel();
+                        },
+                ),
+              ),
+              const SizedBox(height: 16),
+
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -249,12 +284,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Qwen 3.5 0.8B',
+                                selectedModel.displayName,
                                 style: theme.bodyMedium
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                               Text(
-                                'Q4_K_M Quantisierung · ~533 MB',
+                                selectedModel.description,
                                 style: theme.bodySmall,
                               ),
                             ],
@@ -284,8 +319,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 8),
                       Text(
                         '${(_downloadProgress * 100).toStringAsFixed(1)}% · '
-                        '${_formatBytes((LocalLLMService.modelSizeBytes * _downloadProgress).round())} / '
-                        '${_formatBytes(LocalLLMService.modelSizeBytes)}',
+                        '${_formatBytes((selectedModel.sizeBytes * _downloadProgress).round())} / '
+                        '${_formatBytes(selectedModel.sizeBytes)}',
                         style: theme.bodySmall,
                       ),
                     ] else if (_modelDownloaded) ...[

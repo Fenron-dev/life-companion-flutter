@@ -17,12 +17,67 @@ enum LocalLLMStatus {
   error,
 }
 
-/// Service for running Qwen 3.5 0.8B locally on-device via llamadart (llama.cpp).
+/// Configuration for a downloadable local GGUF model.
+class LocalModelConfig {
+  final String id;
+  final String displayName;
+  final String description;
+  final String fileName;
+  final String downloadUrl;
+  final int sizeBytes;
+
+  const LocalModelConfig({
+    required this.id,
+    required this.displayName,
+    required this.description,
+    required this.fileName,
+    required this.downloadUrl,
+    required this.sizeBytes,
+  });
+}
+
+/// Available local model options.
+class LocalModelConfigs {
+  static const qwen35 = LocalModelConfig(
+    id: 'qwen35_0.8b',
+    displayName: 'Qwen 3.5 0.8B',
+    description: 'Q4_K_M · ~533 MB',
+    fileName: 'Qwen3.5-0.8B-Q4_K_M.gguf',
+    downloadUrl:
+        'https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf',
+    sizeBytes: 559000000,
+  );
+
+  static const bonsai17b = LocalModelConfig(
+    id: 'bonsai_1.7b',
+    displayName: 'Bonsai 1.7B',
+    description: 'Q4_K_M · ~1.1 GB',
+    fileName: 'Bonsai-1.7B-Q4_K_M.gguf',
+    downloadUrl:
+        'https://huggingface.co/prism-ml/Bonsai-1.7B-gguf/resolve/main/Bonsai-1.7B-Q4_K_M.gguf',
+    sizeBytes: 1100000000,
+  );
+
+  static const bonsai4b = LocalModelConfig(
+    id: 'bonsai_4b',
+    displayName: 'Bonsai 4B',
+    description: 'Q4_K_M · ~2.6 GB',
+    fileName: 'Bonsai-4B-Q4_K_M.gguf',
+    downloadUrl:
+        'https://huggingface.co/prism-ml/Bonsai-4B-gguf/resolve/main/Bonsai-4B-Q4_K_M.gguf',
+    sizeBytes: 2600000000,
+  );
+
+  static const all = [qwen35, bonsai17b, bonsai4b];
+
+  static LocalModelConfig fromId(String id) =>
+      all.firstWhere((m) => m.id == id, orElse: () => qwen35);
+}
+
+/// Service for running a local GGUF model on-device via llamadart (llama.cpp).
 class LocalLLMService {
-  static const String modelFileName = 'Qwen3.5-0.8B-Q4_K_M.gguf';
-  static const String modelDownloadUrl =
-      'https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf';
-  static const int modelSizeBytes = 559000000; // ~533MB
+  LocalModelConfig _selectedModel = LocalModelConfigs.qwen35;
+  LocalModelConfig get selectedModel => _selectedModel;
 
   LlamaEngine? _engine;
   ChatSession? _chatSession;
@@ -36,11 +91,19 @@ class LocalLLMService {
   String? get errorMessage => _errorMessage;
   bool get isReady => _status == LocalLLMStatus.ready;
 
-  /// Get the local model file path
+  /// Switch to a different model. Disposes the loaded engine if needed.
+  Future<void> setModel(LocalModelConfig model) async {
+    if (_selectedModel.id == model.id) return;
+    await dispose();
+    _selectedModel = model;
+    _modelPath = null;
+  }
+
+  /// Get the local model file path for the currently selected model.
   Future<String> get _modelFilePath async {
     if (_modelPath != null) return _modelPath!;
     final dir = await getApplicationDocumentsDirectory();
-    _modelPath = p.join(dir.path, 'models', modelFileName);
+    _modelPath = p.join(dir.path, 'models', _selectedModel.fileName);
     return _modelPath!;
   }
 
@@ -51,7 +114,7 @@ class LocalLLMService {
     if (!await file.exists()) return false;
     // Verify file isn't truncated (at least 90% of expected size)
     final size = await file.length();
-    return size > modelSizeBytes * 0.9;
+    return size > _selectedModel.sizeBytes * 0.9;
   }
 
   /// Download the GGUF model file with progress reporting
@@ -67,7 +130,7 @@ class LocalLLMService {
       }
 
       final file = File(path);
-      final request = http.Request('GET', Uri.parse(modelDownloadUrl));
+      final request = http.Request('GET', Uri.parse(_selectedModel.downloadUrl));
       final client = http.Client();
 
       try {
@@ -77,7 +140,7 @@ class LocalLLMService {
           throw Exception('Download failed: HTTP ${response.statusCode}');
         }
 
-        final totalBytes = response.contentLength ?? modelSizeBytes;
+        final totalBytes = response.contentLength ?? _selectedModel.sizeBytes;
         int receivedBytes = 0;
         final sink = file.openWrite();
 
@@ -95,7 +158,7 @@ class LocalLLMService {
 
       // Verify download
       final downloadedSize = await file.length();
-      if (downloadedSize < modelSizeBytes * 0.9) {
+      if (downloadedSize < _selectedModel.sizeBytes * 0.9) {
         await file.delete();
         throw Exception('Download incomplete: $downloadedSize bytes');
       }

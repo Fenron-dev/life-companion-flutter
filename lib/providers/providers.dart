@@ -143,6 +143,29 @@ final localLLMServiceProvider = Provider<LocalLLMService>((ref) {
   throw UnimplementedError('LocalLLMService must be initialized before use');
 });
 
+class SelectedLocalModelNotifier extends StateNotifier<LocalModelConfig> {
+  SelectedLocalModelNotifier() : super(LocalModelConfigs.qwen35);
+
+  LocalModelConfig get current => state;
+
+  Future<void> loadFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString('local_model_id') ?? LocalModelConfigs.qwen35.id;
+    state = LocalModelConfigs.fromId(id);
+  }
+
+  Future<void> selectModel(LocalModelConfig model) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('local_model_id', model.id);
+    state = model;
+  }
+}
+
+final selectedLocalModelProvider =
+    StateNotifierProvider<SelectedLocalModelNotifier, LocalModelConfig>((ref) {
+  return SelectedLocalModelNotifier();
+});
+
 // --- Unified AI Service ---
 
 final aiServiceProvider = Provider<AIService>((ref) {
