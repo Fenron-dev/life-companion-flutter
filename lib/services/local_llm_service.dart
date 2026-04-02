@@ -48,27 +48,7 @@ class LocalModelConfigs {
     sizeBytes: 559000000,
   );
 
-  static const bonsai17b = LocalModelConfig(
-    id: 'bonsai_1.7b',
-    displayName: 'Bonsai 1.7B',
-    description: '~248 MB',
-    fileName: 'Bonsai-1.7B.gguf',
-    downloadUrl:
-        'https://huggingface.co/prism-ml/Bonsai-1.7B-gguf/resolve/main/Bonsai-1.7B.gguf',
-    sizeBytes: 260046848,
-  );
-
-  static const bonsai4b = LocalModelConfig(
-    id: 'bonsai_4b',
-    displayName: 'Bonsai 4B',
-    description: '~572 MB',
-    fileName: 'Bonsai-4B.gguf',
-    downloadUrl:
-        'https://huggingface.co/prism-ml/Bonsai-4B-gguf/resolve/main/Bonsai-4B.gguf',
-    sizeBytes: 599785472,
-  );
-
-  static const all = [qwen35, bonsai17b, bonsai4b];
+  static const all = [qwen35];
 
   static LocalModelConfig fromId(String id) =>
       all.firstWhere((m) => m.id == id, orElse: () => qwen35);
