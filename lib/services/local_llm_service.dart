@@ -51,20 +51,20 @@ class LocalModelConfigs {
   static const bonsai17b = LocalModelConfig(
     id: 'bonsai_1.7b',
     displayName: 'Bonsai 1.7B',
-    description: 'Q4_K_M · ~1.1 GB',
-    fileName: 'Bonsai-1.7B-Q4_K_M.gguf',
+    description: '~1.1 GB',
+    fileName: 'Bonsai-1.7B.gguf',
     downloadUrl:
-        'https://huggingface.co/prism-ml/Bonsai-1.7B-gguf/resolve/main/Bonsai-1.7B-Q4_K_M.gguf',
+        'https://huggingface.co/prism-ml/Bonsai-1.7B-gguf/resolve/main/Bonsai-1.7B.gguf',
     sizeBytes: 1100000000,
   );
 
   static const bonsai4b = LocalModelConfig(
     id: 'bonsai_4b',
     displayName: 'Bonsai 4B',
-    description: 'Q4_K_M · ~2.6 GB',
-    fileName: 'Bonsai-4B-Q4_K_M.gguf',
+    description: '~2.6 GB',
+    fileName: 'Bonsai-4B.gguf',
     downloadUrl:
-        'https://huggingface.co/prism-ml/Bonsai-4B-gguf/resolve/main/Bonsai-4B-Q4_K_M.gguf',
+        'https://huggingface.co/prism-ml/Bonsai-4B-gguf/resolve/main/Bonsai-4B.gguf',
     sizeBytes: 2600000000,
   );
 
